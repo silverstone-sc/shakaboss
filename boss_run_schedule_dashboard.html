@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boss Run Schedule Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .timing-mon { background-color: #2563eb; color: white; } /* Blue */
+        .timing-sun { background-color: #c026d3; color: white; } /* Purple / Pink */
+        .timing-fri { background-color: #eab308; color: #1e293b; } /* Yellow */
+        .gimp-highlight { color: #ef4444; font-weight: 600; } /* Red text for gimps */
+        .open-slot { background-color: #fef08a; color: #854d0e; font-weight: 700; border: 1px solid #facc15; } /* Yellow tag */
+        .editable-cell { cursor: pointer; transition: all 0.15s; }
+        .editable-cell:hover { background-color: rgba(59, 130, 246, 0.15); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-3 md:p-8 font-sans">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header & Main Controls -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-5 shadow-lg flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-wide flex items-center gap-2">
+                    <span>⚔️</span> Interactive Boss Raid Schedule
+                </h1>
+                <p class="text-xs md:text-sm text-slate-400 mt-1">Toggle views, filter, or click any cell to edit schedule details. Auto-saves locally.</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2 md:gap-3 w-full lg:w-auto">
+                <!-- View Mode Toggle Buttons -->
+                <div class="bg-slate-900 p-1 rounded-lg border border-slate-700 flex items-center gap-1 w-full sm:w-auto">
+                    <button id="btnBossView" onclick="switchView('boss')" class="flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow">
+                        📊 Boss Grid View
+                    </button>
+                    <button id="btnPlayerView" onclick="switchView('player')" class="flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-400 hover:text-white">
+                        👤 Player Roster View
+                    </button>
+                </div>
+
+                <!-- Table Controls -->
+                <button onclick="addNewRow()" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-3 py-2 rounded-lg transition-colors">
+                    + Add Boss
+                </button>
+                <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded-lg transition-colors">
+                    Export JSON
+                </button>
+                <label class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded-lg transition-colors cursor-pointer">
+                    Import JSON
+                    <input type="file" id="importFile" onchange="importData(event)" accept=".json" class="hidden">
+                </label>
+                <button onclick="resetToDefault()" class="bg-red-900/50 hover:bg-red-800 text-red-200 text-xs px-3 py-2 rounded-lg transition-colors border border-red-700/50">
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 shadow-md flex flex-wrap items-center gap-3">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Filters:</span>
+            
+            <!-- Live Search -->
+            <div class="flex-1 min-w-[200px]">
+                <input type="text" id="searchInput" oninput="applyFilters()" placeholder="🔍 Search boss, player, or timing..." class="w-full bg-slate-900 text-slate-200 border border-slate-700 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <!-- Player Filter Dropdown -->
+            <div class="w-full sm:w-auto">
+                <select id="playerSelect" onchange="applyFilters()" class="w-full bg-slate-900 text-white border border-slate-700 text-xs rounded-lg p-2 focus:outline-none focus:border-blue-500">
+                    <option value="ALL">All Players</option>
+                </select>
+            </div>
+
+            <!-- Boss Filter Dropdown -->
+            <div class="w-full sm:w-auto">
+                <select id="bossSelect" onchange="applyFilters()" class="w-full bg-slate-900 text-white border border-slate-700 text-xs rounded-lg p-2 focus:outline-none focus:border-blue-500">
+                    <option value="ALL">All Bosses</option>
+                </select>
+            </div>
+
+            <button onclick="clearFilters()" class="text-xs text-slate-400 hover:text-slate-200 underline px-1">
+                Clear Filters
+            </button>
+        </div>
+
+        <!-- Top Banner: Time Slot Summary -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg space-y-3">
+            <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Weekly Anchor Slots Summary</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="flex items-center justify-between p-3 rounded-lg border border-blue-500/30 bg-blue-950/40">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold timing-mon">Monday</span>
+                    <span class="text-xs text-slate-300"><span class="font-semibold text-blue-300">9:30 PM:</span> Scamling</span>
+                </div>
+
+                <div class="flex items-center justify-between p-3 rounded-lg border border-purple-500/30 bg-purple-950/40">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold timing-sun">Sunday</span>
+                    <div class="text-right">
+                        <div class="text-xs text-slate-300"><span class="font-semibold text-purple-300">10:00 AM - 12:00 PM:</span> Jase</div>
+                        <div class="text-xs text-slate-300"><span class="font-semibold text-purple-300">10:00 PM:</span> hkaling</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between p-3 rounded-lg border border-yellow-500/30 bg-yellow-950/40">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold timing-fri">Friday</span>
+                    <div class="text-right">
+                        <div class="text-xs text-slate-300"><span class="font-semibold text-yellow-300">8:00 PM:</span> Silver</div>
+                        <div class="text-xs text-slate-300"><span class="font-semibold text-yellow-300">9:30 PM:</span> Jon & Jess</div>
+                        <div class="text-xs text-slate-300"><span class="font-semibold text-yellow-300">10:00 PM:</span> KL xKalos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 1: Main Schedule Grid Table -->
+        <div id="bossViewContainer" class="bg-slate-800 border border-slate-700 rounded-xl shadow-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm" id="scheduleTable">
+                    <thead>
+                        <tr class="bg-slate-900 border-b border-slate-700 text-slate-300">
+                            <th class="py-3 px-4 font-bold border-r border-slate-700 w-36">BOSS</th>
+                            <th class="py-3 px-4 font-bold border-r border-slate-700 w-40">TIMING</th>
+                            <th class="py-3 px-4 font-bold border-r border-slate-700 text-center" colspan="2">CORE MEMBERS</th>
+                            <th class="py-3 px-4 font-bold border-r border-slate-700 text-center" colspan="3">GIMP / RESERVES</th>
+                            <th class="py-3 px-2 font-bold text-center w-12">ACTION</th>
+                        </tr>
+                        <tr class="bg-slate-950/60 border-b border-slate-700 text-xs text-slate-400">
+                            <th class="py-1.5 px-4 border-r border-slate-700"></th>
+                            <th class="py-1.5 px-4 border-r border-slate-700"></th>
+                            <th class="py-1.5 px-3 border-r border-slate-700 w-1/5">Slot 1</th>
+                            <th class="py-1.5 px-3 border-r border-slate-700 w-1/5">Slot 2</th>
+                            <th class="py-1.5 px-3 border-r border-slate-700 w-1/6">Slot 1</th>
+                            <th class="py-1.5 px-3 border-r border-slate-700 w-1/6">Slot 2</th>
+                            <th class="py-1.5 px-3 border-r border-slate-700 w-1/6">Slot 3</th>
+                            <th class="py-1.5 px-2"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700/60 text-slate-200" id="tableBody">
+                        <!-- Table rows populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW 2: Player Card Roster View -->
+        <div id="playerViewContainer" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Player cards populated dynamically -->
+        </div>
+
+    </div>
+
+    <script>
+        const defaultScheduleData = [
+            { boss: "XSeren", timing: "", timingType: "", core1: "Naomi Lynn", core2: "Shaka NL", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "XSeren", timing: "Sunday", timingType: "sun", core1: "Jason DB", core2: "Shaka Lynn", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "XKalos", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi Lynn", core2: "Shaka NL", gimp1: "Jason DB", gimp2: "Don", gimp3: "Hellfeather", gimp1IsRed: false, gimp2IsRed: true, gimp3IsRed: true },
+            { boss: "xKalos", timing: "", timingType: "", core1: "Shaka Lynn", core2: "Hellfeather", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "xKalos", timing: "Friday 10pm", timingType: "fri", core1: "Shaka Kanna", core2: "KL", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "Hkaling", timing: "Sunday 10pm", timingType: "sun", core1: "Shaka Lynn", core2: "Xera", gimp1: "Silver", gimp2: "Don", gimp3: "", core2IsRed: false, gimp1IsRed: true, gimp2IsRed: true },
+            { boss: "Hkaling", timing: "Sunday 10am+", timingType: "sun", core1: "Shaka Kanna", core2: "Naomi Lynn", gimp1: "Jason DB", gimp2: "", gimp3: "" },
+            { boss: "Xadv", timing: "", timingType: "", core1: "Shaka NL", core2: "Jeff", gimp1: "Yato", gimp2: "", gimp3: "" },
+            { boss: "Hadv", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi NW", core2: "Jason Ren", gimp1: "Shaka Lynn", gimp2: "", gimp3: "" },
+            { boss: "Hadv", timing: "", timingType: "", core1: "Naomi Lynn", core2: "Shaka Kanna", gimp1: "Madisi", gimp2: "", gimp3: "", gimp1IsRed: true },
+            { boss: "H Star", timing: "Friday 8pm", timingType: "fri", core1: "Naomi Lynn", core2: "Shaka NL", gimp1: "Silver", gimp2: "", gimp3: "", gimp1IsRed: true },
+            { boss: "H Star", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi NW", core2: "Jason Ren", gimp1: "Shaka Lynn", gimp2: "", gimp3: "" },
+            { boss: "H Star", timing: "", timingType: "", core1: "Shaka Kanna", core2: "Madisi", gimp1: "R > +1", gimp2: "", gimp3: "", core2IsRed: true, gimp1IsOpen: true },
+            { boss: "H Limbo", timing: "Friday 8pm", timingType: "fri", core1: "Naomi Lynn", core2: "Shaka NL", gimp1: "Silver", gimp2: "", gimp3: "", gimp1IsRed: true },
+            { boss: "H Limbo", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi NW", core2: "Jason Ren", gimp1: "Shaka Lynn", gimp2: "", gimp3: "" },
+            { boss: "H Limbo", timing: "", timingType: "", core1: "Shaka Kanna", core2: "Madisi", gimp1: "R > +1", gimp2: "", gimp3: "", core2IsRed: true, gimp1IsOpen: true },
+            { boss: "H Baldrix", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi", core2: "Shaka", gimp1: "Jase", gimp2: "", gimp3: "" },
+            { boss: "H Jupiter", timing: "", timingType: "", core1: "Shaka NL", core2: "", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "xBM", timing: "", timingType: "", core1: "Shaka NL", core2: "Naomi Lynn", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "xBM", timing: "", timingType: "", core1: "Naomi NW", core2: "Shaka Lynn", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "Xkaling", timing: "Monday 9:30pm", timingType: "mon", core1: "Team Scamling", core2: "", gimp1: "", gimp2: "", gimp3: "" },
+            { boss: "Bellona", timing: "", timingType: "", core1: "Shaka NL", core2: "Naomi Lynn", gimp1: "R > +1", gimp2: "", gimp3: "", gimp1IsOpen: true },
+            { boss: "Bellona", timing: "Sunday 10am+", timingType: "sun", core1: "Naomi NW", core2: "Jason Ren", gimp1: "Shaka Lynn", gimp2: "", gimp3: "" },
+            { boss: "Bellona", timing: "", timingType: "", core1: "Shaka Kanna", core2: "Madisi", gimp1: "R > +1", gimp2: "", gimp3: "", core2IsRed: true, gimp1IsOpen: true }
+        ];
+
+        let scheduleData = loadData();
+        let currentView = 'boss'; // 'boss' or 'player'
+
+        function saveData() {
+            localStorage.setItem('bossScheduleData', JSON.stringify(scheduleData));
+            updateFilterDropdowns();
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('bossScheduleData');
+            return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(defaultScheduleData));
+        }
+
+        function switchView(view) {
+            currentView = view;
+            const btnBoss = document.getElementById('btnBossView');
+            const btnPlayer = document.getElementById('btnPlayerView');
+            const bossContainer = document.getElementById('bossViewContainer');
+            const playerContainer = document.getElementById('playerViewContainer');
+
+            if (view === 'boss') {
+                btnBoss.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow";
+                btnPlayer.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-400 hover:text-white";
+                bossContainer.classList.remove('hidden');
+                playerContainer.classList.add('hidden');
+            } else {
+                btnPlayer.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow";
+                btnBoss.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-400 hover:text-white";
+                playerContainer.classList.remove('hidden');
+                bossContainer.classList.add('hidden');
+            }
+            applyFilters();
+        }
+
+        function getAllPlayers() {
+            const playerSet = new Set();
+            scheduleData.forEach(row => {
+                [row.core1, row.core2, row.gimp1, row.gimp2, row.gimp3].forEach(name => {
+                    if (name && name !== "R > +1" && name !== "Team Scamling") {
+                        playerSet.add(name.trim());
+                    }
+                });
+            });
+            return Array.from(playerSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+
+        function getAllBosses() {
+            const bossSet = new Set(scheduleData.map(r => r.boss.trim()).filter(Boolean));
+            return Array.from(bossSet).sort();
+        }
+
+        function updateFilterDropdowns() {
+            const playerSelect = document.getElementById('playerSelect');
+            const bossSelect = document.getElementById('bossSelect');
+            
+            const selectedPlayer = playerSelect.value;
+            const selectedBoss = bossSelect.value;
+
+            playerSelect.innerHTML = '<option value="ALL">All Players</option>';
+            getAllPlayers().forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                playerSelect.appendChild(opt);
+            });
+            if (getAllPlayers().includes(selectedPlayer)) playerSelect.value = selectedPlayer;
+
+            bossSelect.innerHTML = '<option value="ALL">All Bosses</option>';
+            getAllBosses().forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                bossSelect.appendChild(opt);
+            });
+            if (getAllBosses().includes(selectedBoss)) bossSelect.value = selectedBoss;
+        }
+
+        function applyFilters() {
+            const search = document.getElementById('searchInput').value.toLowerCase().trim();
+            const playerFilter = document.getElementById('playerSelect').value;
+            const bossFilter = document.getElementById('bossSelect').value;
+
+            if (currentView === 'boss') {
+                renderBossTable(search, playerFilter, bossFilter);
+            } else {
+                renderPlayerCards(search, playerFilter, bossFilter);
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = "";
+            document.getElementById('playerSelect').value = "ALL";
+            document.getElementById('bossSelect').value = "ALL";
+            applyFilters();
+        }
+
+        function renderBossTable(search, playerFilter, bossFilter) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = "";
+
+            scheduleData.forEach((row, rowIndex) => {
+                const names = [row.core1, row.core2, row.gimp1, row.gimp2, row.gimp3].map(n => (n || '').trim());
+                
+                // Filtering Logic
+                const matchesPlayer = playerFilter === "ALL" || names.includes(playerFilter);
+                const matchesBoss = bossFilter === "ALL" || row.boss === bossFilter;
+                const matchesSearch = !search || 
+                    row.boss.toLowerCase().includes(search) || 
+                    (row.timing && row.timing.toLowerCase().includes(search)) ||
+                    names.some(n => n.toLowerCase().includes(search));
+
+                if (!matchesPlayer || !matchesBoss || !matchesSearch) return;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-750/50 transition-colors";
+
+                // Boss Cell
+                const bossTd = `<td class="py-2.5 px-4 font-bold text-slate-100 border-r border-slate-700/70 editable-cell" onclick="editBoss(${rowIndex})">${row.boss || '<span class="text-slate-500 italic">Click to edit</span>'}</td>`;
+
+                // Timing Cell
+                let timingBadge = `<span class="text-slate-500 font-mono text-xs italic">Default</span>`;
+                if (row.timing) {
+                    let badgeStyle = "bg-slate-700 text-slate-200";
+                    if (row.timingType === "mon") badgeStyle = "timing-mon font-bold";
+                    if (row.timingType === "sun") badgeStyle = "timing-sun font-bold";
+                    if (row.timingType === "fri") badgeStyle = "timing-fri font-bold";
+                    timingBadge = `<span class="inline-block px-2 py-0.5 rounded text-xs ${badgeStyle}">${row.timing}</span>`;
+                }
+                const timingTd = `<td class="py-2.5 px-4 border-r border-slate-700/70 editable-cell" onclick="editTiming(${rowIndex})">${timingBadge}</td>`;
+
+                // Cell Formatter
+                const formatCell = (key, name, isRed = false, isOpen = false) => {
+                    let cellContent = `<span class="text-slate-600 italic text-xs">+ Add</span>`;
+                    if (isOpen || name === "R > +1") {
+                        cellContent = `<span class="inline-block px-2 py-0.5 rounded text-xs open-slot">R &gt; +1</span>`;
+                    } else if (name) {
+                        let textClass = isRed ? "gimp-highlight" : "text-slate-200";
+                        if (playerFilter !== "ALL" && name.trim() === playerFilter) {
+                            textClass = "ring-2 ring-blue-400 bg-blue-900/60 px-1.5 py-0.5 rounded text-white font-bold";
+                        }
+                        cellContent = `<span class="${textClass}">${name}</span>`;
+                    }
+                    return `<td class="py-2.5 px-3 border-r border-slate-700/70 editable-cell" onclick="editPlayer(${rowIndex}, '${key}')">${cellContent}</td>`;
+                };
+
+                // Delete Action Cell
+                const actionTd = `
+                    <td class="py-2.5 px-2 text-center">
+                        <button onclick="deleteRow(${rowIndex})" class="text-slate-500 hover:text-red-400 font-bold p-1 transition-colors" title="Delete Row">✕</button>
+                    </td>`;
+
+                tr.innerHTML = 
+                    bossTd +
+                    timingTd +
+                    formatCell('core1', row.core1) +
+                    formatCell('core2', row.core2, row.core2IsRed) +
+                    formatCell('gimp1', row.gimp1, row.gimp1IsRed, row.gimp1IsOpen) +
+                    formatCell('gimp2', row.gimp2, row.gimp2IsRed) +
+                    formatCell('gimp3', row.gimp3, row.gimp3IsRed) +
+                    actionTd;
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderPlayerCards(search, playerFilter, bossFilter) {
+            const container = document.getElementById('playerViewContainer');
+            container.innerHTML = "";
+
+            const allPlayers = getAllPlayers();
+            
+            allPlayers.forEach(player => {
+                if (playerFilter !== "ALL" && player !== playerFilter) return;
+
+                // Find runs for this player
+                const playerRuns = [];
+                scheduleData.forEach(row => {
+                    if (bossFilter !== "ALL" && row.boss !== bossFilter) return;
+
+                    const cores = [row.core1, row.core2].map(n => (n || '').trim());
+                    const gimps = [row.gimp1, row.gimp2, row.gimp3].map(n => (n || '').trim());
+
+                    if (cores.includes(player)) {
+                        playerRuns.push({ boss: row.boss, timing: row.timing, timingType: row.timingType, role: 'Core', isRed: false });
+                    } else if (gimps.includes(player)) {
+                        let isRed = false;
+                        if (row.gimp1 === player && row.gimp1IsRed) isRed = true;
+                        if (row.gimp2 === player && row.gimp2IsRed) isRed = true;
+                        if (row.gimp3 === player && row.gimp3IsRed) isRed = true;
+                        playerRuns.push({ boss: row.boss, timing: row.timing, timingType: row.timingType, role: 'Gimp / Reserve', isRed });
+                    }
+                });
+
+                if (search) {
+                    const matchesName = player.toLowerCase().includes(search);
+                    const matchesRun = playerRuns.some(r => r.boss.toLowerCase().includes(search) || (r.timing && r.timing.toLowerCase().includes(search)));
+                    if (!matchesName && !matchesRun) return;
+                }
+
+                if (playerRuns.length === 0) return;
+
+                // Build Card HTML
+                const card = document.createElement('div');
+                card.className = "bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-3";
+                
+                let runsHtml = playerRuns.map(run => {
+                    let badgeStyle = "bg-slate-700 text-slate-300";
+                    if (run.timingType === "mon") badgeStyle = "timing-mon font-bold";
+                    if (run.timingType === "sun") badgeStyle = "timing-sun font-bold";
+                    if (run.timingType === "fri") badgeStyle = "timing-fri font-bold";
+
+                    const roleBadge = run.role === 'Core' 
+                        ? `<span class="text-xs bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-2 py-0.5 rounded">Core</span>`
+                        : `<span class="text-xs bg-red-950/80 ${run.isRed ? 'text-red-400' : 'text-slate-300'} border border-red-800/50 px-2 py-0.5 rounded">Gimp</span>`;
+
+                    return `
+                        <div class="flex items-center justify-between bg-slate-900/70 p-2.5 rounded-lg border border-slate-750">
+                            <div>
+                                <span class="font-bold text-slate-100 text-sm">${run.boss}</span>
+                                <div class="mt-0.5">
+                                    <span class="inline-block px-1.5 py-0.2 rounded text-[10px] ${badgeStyle}">${run.timing || 'Default'}</span>
+                                </div>
+                            </div>
+                            <div>${roleBadge}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <h3 class="font-bold text-blue-400 text-base flex items-center gap-2">
+                            <span>👤</span> ${player}
+                        </h3>
+                        <span class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono">${playerRuns.length} runs</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${runsHtml}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function editBoss(index) {
+            const current = scheduleData[index].boss;
+            const updated = prompt("Edit Boss Name:", current);
+            if (updated !== null && updated.trim()) {
+                scheduleData[index].boss = updated.trim();
+                saveData();
+                applyFilters();
+            }
+        }
+
+        function editTiming(index) {
+            const currentTiming = scheduleData[index].timing;
+            const currentType = scheduleData[index].timingType || "";
+            
+            const newTiming = prompt("Edit Timing Text (e.g. Sunday 10am+, Friday 8pm):", currentTiming);
+            if (newTiming === null) return;
+
+            const typeChoice = prompt("Select timing color:\n1 = Monday (Blue)\n2 = Sunday (Purple/Pink)\n3 = Friday (Yellow)\n4 = Default (Gray)", 
+                currentType === 'mon' ? '1' : currentType === 'sun' ? '2' : currentType === 'fri' ? '3' : '4');
+
+            let newType = "";
+            if (typeChoice === '1') newType = "mon";
+            else if (typeChoice === '2') newType = "sun";
+            else if (typeChoice === '3') newType = "fri";
+
+            scheduleData[index].timing = newTiming.trim();
+            scheduleData[index].timingType = newType;
+            saveData();
+            applyFilters();
+        }
+
+        function editPlayer(index, key) {
+            const current = scheduleData[index][key] || "";
+            const isRedKey = key + 'IsRed';
+            const isOpenKey = key + 'IsOpen';
+
+            const updatedName = prompt(`Edit Player Name for ${key.toUpperCase()}:`, current);
+            if (updatedName === null) return;
+
+            const trimmed = updatedName.trim();
+            scheduleData[index][key] = trimmed;
+
+            if (trimmed === "R > +1" || trimmed === "R>+1" || trimmed === "R> +1") {
+                scheduleData[index][key] = "R > +1";
+                scheduleData[index][isOpenKey] = true;
+                scheduleData[index][isRedKey] = false;
+            } else if (trimmed !== "") {
+                scheduleData[index][isOpenKey] = false;
+                const setRed = confirm(`Flag "${trimmed}" as Gimp/Reserve (Red text)?`);
+                scheduleData[index][isRedKey] = setRed;
+            }
+
+            saveData();
+            applyFilters();
+        }
+
+        function addNewRow() {
+            scheduleData.push({
+                boss: "New Boss",
+                timing: "",
+                timingType: "",
+                core1: "",
+                core2: "",
+                gimp1: "",
+                gimp2: "",
+                gimp3: ""
+            });
+            saveData();
+            applyFilters();
+        }
+
+        function deleteRow(index) {
+            if (confirm(`Delete boss run row "${scheduleData[index].boss}"?`)) {
+                scheduleData.splice(index, 1);
+                saveData();
+                applyFilters();
+            }
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scheduleData, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "boss_schedule.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importData(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (Array.isArray(parsed)) {
+                        scheduleData = parsed;
+                        saveData();
+                        applyFilters();
+                        alert("Schedule imported successfully!");
+                    }
+                } catch(err) {
+                    alert("Invalid JSON file format.");
+                }
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function resetToDefault() {
+            if (confirm("Reset schedule back to default dataset?")) {
+                scheduleData = JSON.parse(JSON.stringify(defaultScheduleData));
+                saveData();
+                applyFilters();
+            }
+        }
+
+        // Initial setup
+        updateFilterDropdowns();
+        applyFilters();
+    </script>
+</body>
+</html>
